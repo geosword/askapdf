@@ -1,19 +1,17 @@
 import sys
-import PyPDF2
-import openai
+import fitz
+import requests
+import json
+import os
 
 # Set your OpenAI API key
-openai.api_key = 'YOUR_OPENAI_API_KEY'
+api_key = os.environ['OPENAI_API_KEY']
 
 def extract_text_from_pdf(file_path):
-    with open(file_path, 'rb') as file:
-        reader = PyPDF2.PdfFileReader(file)
-        num_pages = reader.numPages
+    with fitz.open(file_path) as doc:
         text = ""
-
-        for page in range(num_pages):
-            page_obj = reader.getPage(page)
-            text += page_obj.extractText()
+        for page in doc:
+            text += page.get_text()
 
     return text
 
@@ -25,18 +23,26 @@ def ask_openai_model(model_name, pdf_file_path, question):
     prompt = f"PDF: {pdf_text}\n\nQuestion: {question}\nAnswer:"
 
     # Call the OpenAI API to generate a response
-    response = openai.Completion.create(
-        engine=model_name,
-        prompt=prompt,
-        max_tokens=100,
-        temperature=0.7,
-        n=1,
-        stop=None,
-        echo=True
-    )
-
-    # Extract the generated answer from the response
-    answer = response.choices[0].text.strip()
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+    data = {
+        "model": model_name,
+        "messages": [
+            {
+            "role": "user",
+            "content": "You are an expert researcher, I will provide you some text, and ask you questions about it"
+            },
+            {
+            "role": "user",
+            "content": prompt
+            }
+        ],
+        "temperature": float(os.environ.get('LRMATIC_TEMPERATURE',1))
+    }
+    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data, timeout=(3,300))
+    answer = response.json()
 
     return answer
 
